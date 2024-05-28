@@ -1,0 +1,77 @@
+package bert
+
+import (
+	"fmt"
+
+	"torch/tokenizer"
+	"torch/tokenizer/model/wordpiece"
+	"torch/tokenizer/normalizer"
+	"torch/tokenizer/pretokenizer"
+	"torch/tokenizer/processor"
+
+	// "torch/transformer/pretrained"
+	"torch/transformer/util"
+)
+
+type BertTokenizerFast = tokenizer.Tokenizer
+
+// BertJapaneseTokenizerFromPretrained initiate BERT tokenizer for Japanese language from pretrained file.
+func BertJapaneseTokenizerFromPretrained(pretrainedModelNameOrPath string, customParams map[string]interface{}) *tokenizer.Tokenizer {
+
+	// TODO: implement it
+
+	panic("Not implemented yet.")
+}
+
+type Tokenizer struct {
+	*tokenizer.Tokenizer
+}
+
+func NewTokenizer() *Tokenizer {
+	tk := tokenizer.NewTokenizer(nil)
+	return &Tokenizer{tk}
+}
+
+func (bt *Tokenizer) Load(modelNameOrPath string, params map[string]interface{}) error {
+	cachedFile, err := util.CachedPath(modelNameOrPath, "vocab.txt")
+	if err != nil {
+		return err
+	}
+
+	model, err := wordpiece.NewWordPieceFromFile(cachedFile, "[UNK]")
+	if err != nil {
+		return err
+	}
+
+	bt.WithModel(model)
+
+	bertNormalizer := normalizer.NewBertNormalizer(true, true, true, true)
+	bt.WithNormalizer(bertNormalizer)
+
+	bertPreTokenizer := pretokenizer.NewBertPreTokenizer()
+	bt.WithPreTokenizer(bertPreTokenizer)
+
+	var specialTokens []tokenizer.AddedToken
+	specialTokens = append(specialTokens, tokenizer.NewAddedToken("[MASK]", true))
+
+	bt.AddSpecialTokens(specialTokens)
+
+	sepId, ok := bt.TokenToId("[SEP]")
+	if !ok {
+		return fmt.Errorf("Cannot find ID for [SEP] token.\n")
+	}
+	sep := processor.PostToken{Id: sepId, Value: "[SEP]"}
+
+	clsId, ok := bt.TokenToId("[CLS]")
+	if !ok {
+		return fmt.Errorf("Cannot find ID for [CLS] token.\n")
+	}
+	cls := processor.PostToken{Id: clsId, Value: "[CLS]"}
+
+	postProcess := processor.NewBertProcessing(sep, cls)
+	bt.WithPostProcessor(postProcess)
+
+	// TODO: update params
+
+	return nil
+}
