@@ -1,0 +1,5 @@
+Name: torch
+Description:torch pc file
+Version: 2.4
+Cflags: -Iinclude -Iinclude/torch/csrc/api/include -O3 -Wall -Wno-unused-variable -Wno-deprecated-declarations -Wno-c++11-narrowing -g -Wno-sign-compare -Wno-unused-function -D_GLIBCXX_USE_CXX11_ABI=1
+Libs: -Llib/ -lcuda -lstdc++ -ltorch -ltorch_cpu -ltorch_cuda -lc10
