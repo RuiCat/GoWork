@@ -1,0 +1,18 @@
+#version 150
+
+struct Gradient
+{
+    vec4 color1;
+    vec4 color2;
+};
+
+uniform Gradient _gradient;
+
+out vec4 fragColor;
+in vec4 vertexColor;
+
+void main()
+{
+    fragColor = vertexColor;
+}
+

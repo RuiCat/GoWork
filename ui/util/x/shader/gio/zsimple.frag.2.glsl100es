@@ -1,0 +1,13 @@
+#version 100
+precision mediump float;
+precision highp int;
+
+uniform mediump sampler2D tex;
+
+varying highp vec4 vertexColor;
+
+void main()
+{
+    gl_FragData[0] = vertexColor;
+}
+

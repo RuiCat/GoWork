@@ -1,0 +1,373 @@
+/*
+  默认背景
+*/
+body {
+  margin: 0;
+  padding: 0;
+	font-weight: 500;
+	font-size: 1.05em;
+	font-family: "Microsoft YaHei","宋体","Segoe UI", "Lucida Grande", Helvetica, Arial,sans-serif, FreeSans, Arimo;
+}
+/*
+  // body 背景
+  html,
+  body {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+  body {
+    background: url(./Data/bj.jpg)no-repeat;
+    width: 100%;
+    height: 100%;
+    background-size: 100% 100%;
+    position: absolute;
+    filter: progid:DXImageTransform.Microsoft.AlphaImageLoader(src='bg-login.png', sizingMethod='scale');
+  }
+*/
+/*
+    公用颜色
+*/
+/*背景颜色*/
+.Red {background-color: #f44336!important;} 
+.Blue {background-color: #008CBA!important;}
+.Green {background-color: #4CAF50!important;}
+.Gray {background-color: #e7e7e7!important; color: black!important;}
+.Black {background-color: #555555!important;}
+/*点燃颜色*/
+.HoverRed:hover {background-color: #f44336!important;} 
+.HoverBlue:hover{background-color: #008CBA!important;}
+.HoverGreen:hover {background-color: #4CAF50!important;}
+.HoverGray:hover {background-color: #e7e7e7!important; color: black!important;}
+.HoverBlack:hover {background-color: #555555!important;}
+/*按下颜色*/
+.ActiveRed:active {background-color: #f44336!important;} 
+.ActiveBlue:active{background-color: #008CBA!important;}
+.ActiveGreen:active {background-color: #4CAF50!important;}
+.ActiveGray:active {background-color: #e7e7e7!important; color: black!important;}
+.ActiveBlack:active {background-color: #555555!important;}
+/*附加颜色*/
+.Bgcolor-1 { background: #f0efee; }
+.Bgcolor-2 { background: #f9f9f9; }
+.Bgcolor-3 { background: #e8e8e8; }/*light grey*/
+.Bgcolor-4 { background: #2f3238; color: #fff; }/*Dark grey*/
+.Bgcolor-5 { background: #df6659; color: #521e18; }/*pink1*/
+.Bgcolor-6 { background: #2fa8ec; }/*sky blue*/
+.Bgcolor-7 { background: #d0d6d6; }/*White tea*/
+.Bgcolor-8 { background: #3d4444; color: #fff; }/*Dark grey2*/
+.Bgcolor-9 { background: #ef3f52; color: #fff;}/*pink2*/
+.Bgcolor-10{ background: #64448f; color: #fff;}/*Violet*/
+.Bgcolor-11{ background: #3755ad; color: #fff;}/*dark blue*/
+.Bgcolor-12{ background: #3498DB; color: #fff;}/*light blue*/
+.Bgcolor-20{ background: #494A5F;color: #D5D6E2;}
+/*
+  阴影
+*/
+.Shadow { box-shadow: 0 12px 16px 0 rgba(0,0,0,0.24), 0 17px 50px 0 rgba(0,0,0,0.19);}
+.ShadowHover:hover { box-shadow: 0 12px 16px 0 rgba(0,0,0,0.24), 0 17px 50px 0 rgba(0,0,0,0.19);}
+ /**
+  * 背景透明虚化
+  * 边缘圆角化
+  * 文字增加淡阴影
+  */ 
+.Description{
+  background: hsla(0,0%,100%,.25) border-box;
+  border-radius: .3em;
+  box-shadow: 0 0 0 1px hsla(0,0%,100%,.3) inset,
+              0 .5em 1em rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 1px hsla(0,0%,100%,.3);
+} 
+/*使用滤镜模糊边缘*/
+.Description::before{
+  content: '';
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: -1;
+  -webkit-filter: blur(20px);
+  filter: blur(20px);
+}
+/*
+    按钮
+*/
+.PetUIButton {
+    min-width: 100px;
+    min-height: 40px;
+    background-color: #4CAF50;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    padding: 15px 15px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+}
+.PetUIButton:hover { background-color: #008CBA;  color: white;}
+/*
+    按钮动画
+      Arrows 箭头动画
+*/
+.PetUIButton.Arrows {transition: all 0.5s;cursor: pointer;}
+.PetUIButton.Arrows span {cursor: pointer;display: inline-block;position: relative;transition: 0.5s;}
+.PetUIButton.Arrows span:after {  content: '»'; position: absolute; opacity: 0; top: 0; right: -20px; transition: 0.5s;}
+.PetUIButton.Arrows:hover span { padding-right: 25px;}
+.PetUIButton.Arrows:hover span:after { opacity: 1; right: 0;}
+/*
+    选择按钮
+*/
+.PetUISwitch {
+  display: block;
+  margin-top: 20px;
+  margin-left:10px;
+  min-width: 100px;
+}
+.PetUISwitch .slider {
+  position: relative;
+  display: inline-block;
+  height: 8px;
+  width: 32px;
+  background: #d5d5d5;
+  box-shadow: 0px 0px 10px 1px #d5d5d5;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-transition: all 0.2s ease;
+  transition: all 0.2s ease;
+}
+.PetUISwitch .slider:after {
+  position: absolute;
+  left: -8px;
+  top: -8px;
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #eeeeee;
+  box-shadow: 0px 0px 10px 1px #eeeeee;
+  content: '';
+  -webkit-transition: all 0.2s ease;
+  transition: all 0.2s ease;
+}
+.PetUISwitch .input {
+  display: none;
+}
+.PetUISwitch .input ~ .label {
+  margin-left: 15px;
+}
+.PetUISwitch .input:checked ~ .slider:after {
+  left: 16px;
+}
+/*
+    选择按钮样式
+*/
+.PetUISwitch.primary .input:checked:not(:disabled) ~ .slider {
+    background: #28e1bd;
+}
+.PetUISwitch.primary .input:checked:not(:disabled) ~ .slider:after {
+  background: #1abc9c;
+  box-shadow: 0px 0px 10px 1px #1abc9c;
+}
+.PetUISwitch.info .input:checked:not(:disabled) ~ .slider {
+  background: #5faee3;
+}
+.PetUISwitch.info .input:checked:not(:disabled) ~ .slider:after {
+  background: #3498db;
+  box-shadow: 0px 0px 10px 1px #3498db;
+}
+.PetUISwitch.success .input:checked:not(:disabled) ~ .slider {
+  background: #54d98c;
+}
+.PetUISwitch.success .input:checked:not(:disabled) ~ .slider:after {
+  background: #2ecc71;
+  box-shadow: 0px 0px 10px 1px #2ecc71;
+}
+.PetUISwitch.danger .input:checked:not(:disabled) ~ .slider {
+  background: #ed7669;
+}
+.PetUISwitch.danger .input:checked:not(:disabled) ~ .slider:after {
+  background: #e74c3c;
+  box-shadow: 0px 0px 10px 1px #e74c3c;
+}
+.PetUISwitch.warning .input:checked:not(:disabled) ~ .slider {
+  background: #eb9950;
+}
+.PetUISwitch.warning .input:checked:not(:disabled) ~ .slider:after {
+  background: #e67e22;
+  box-shadow: 0px 0px 10px 1px #e67e22;
+}
+/*关闭发光效果*/
+.PetUISwitch.CloseGlowing .slider{box-shadow: 0 0 !important;}
+.PetUISwitch.CloseGlowing .slider:after{ box-shadow: 0 0 !important;}
+/*
+    进度条
+*/
+.PetUIProgressBar {
+  /*进度条顶边距*/
+  margin:10px 0 0 0;
+}
+/*默认样式*/
+.PetUIProgressBar.background {
+  background: grey;
+  border-radius: 5px;
+  height: 6px;
+ }
+.PetUIProgressBar.color{
+  height: 6px;
+  display: block;
+  border-radius: 5px;
+  background-color: #FFFFFF;
+  box-shadow:0px 0px 10px 1px #fff, 0 0 1px #fff, 0 0 1px #fff, 0 0 1px #fff, 0 0 1px #fff, 0 0 1px #fff, 0 0 1px #fff;
+}
+/*颜色样式*/
+.PetUIProgressBar.color-1{
+  background-color: #FC8C84;
+  box-shadow:0px 0px 10px 1px #FF5722, 0 0 1px #FF5722, 0 0 1px #FF5722, 0 0 1px #FF5722, 0 0 1px #FF5722, 0 0 1px #FF5722, 0 0 1px #FF5722;
+}
+.PetUIProgressBar.color-2 {
+  background-color: #F0B474;
+  box-shadow:0px 0px 10px 1px #FDD835, 0 0 1px #FDD835, 0 0 1px #FDD835, 0 0 1px #FDD835, 0 0 1px #FDD835, 0 0 1px #FDD835, 0 0 1px #FDD835;
+} 
+.PetUIProgressBar.color-3 {
+  background-color: #CC8FFC;
+  box-shadow:0px 0px 10px 1px #8E24AA, 0 0 1px #8E24AA, 0 0 1px #8E24AA, 0 0 1px #8E24AA, 0 0 1px #8E24AA, 0 0 1px #8E24AA, 0 0 1px #8E24AA;
+}
+.PetUIProgressBar.color-4 {
+  background-color: #F8D670;
+  box-shadow:0px 0px 10px 1px #827717, 0 0 1px #827717, 0 0 1px #827717, 0 0 1px #827717, 0 0 1px #827717, 0 0 1px #827717, 0 0 1px #827717;
+}
+.PetUIProgressBar.color-5 {
+  background-color: #6CF0F0;
+  box-shadow:0px 0px 10px 1px #00E5FF, 0 0 1px #00E5FF, 0 0 1px #00E5FF, 0 0 1px #00E5FF, 0 0 1px #00E5FF, 0 0 1px #00E5FF, 0 0 1px #00E5FF;
+}
+.PetUIProgressBar.color-6 {
+  background-color: #F77E7E;
+  box-shadow:0px 0px 10px 1px #6D4C41, 0 0 1px #6D4C41, 0 0 1px #6D4C41, 0 0 1px #6D4C41, 0 0 1px #6D4C41, 0 0 1px #6D4C41, 0 0 1px #6D4C41;
+}
+.PetUIProgressBar.color-7 {
+  background-color: #F39F80;
+  box-shadow:0px 0px 10px 1px #827717, 0 0 1px #3F51B5, 0 0 1px #3F51B5, 0 0 1px #3F51B5, 0 0 1px #3F51B5, 0 0 1px #3F51B5, 0 0 1px #3F51B5;
+}
+.PetUIProgressBar.color-8 {
+  background-color: #D8E46A;
+  box-shadow:0px 0px 10px 1px #8BC34A, 0 0 1px #8BC34A, 0 0 1px #8BC34A, 0 0 1px #8BC34A, 0 0 1px #8BC34A, 0 0 1px #8BC34A, 0 0 1px #8BC34A;
+}
+/*进度条动画*/
+.PetUIProgressBar.BackgroundAnime  >  div > .color  {background: -webkit-repeating-linear-gradient(20deg, #fff 0,#fff 10px,#CCCACA 10px,#CCCACA 20px)}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-1  {background: -webkit-repeating-linear-gradient(20deg, #FC8C84 0,#FC8C84 10px,#FFAFAC 10px,#FFAFAC 20px)}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-2  {background: -webkit-repeating-linear-gradient(20deg, #F0B474 0,#F0B474 10px,#F1D1A3 10px,#F1D1A3 20px);}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-3  {background: -webkit-repeating-linear-gradient(20deg, #CC8FFC 0,#CC8FFC 10px,#DAB2F7 10px,#DAB2F7 20px);}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-4  {background: -webkit-repeating-linear-gradient(20deg, #F8D670 0,#F8D670 10px,#FCEDBB 10px,#FCEDBB 20px);}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-5  {background: -webkit-repeating-linear-gradient(20deg, #6CF0F0 0,#6CF0F0 10px,#B2E9EB 10px,#B2E9EB 20px);}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-6  {background: -webkit-repeating-linear-gradient(20deg, #F77E7E 0,#F77E7E 10px,#ECB8B7 10px,#ECB8B7 20px);}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-7  {background: -webkit-repeating-linear-gradient(20deg, #F39F80 0,#F39F80 10px,#ECC4B5 10px,#ECC4B5 20px);}
+.PetUIProgressBar.BackgroundAnime  >  div > .color-8  {background: -webkit-repeating-linear-gradient(20deg, #D8E46A 0,#D8E46A 10px,#D8DFA7 10px,#D8DFA7 20px);}
+.PetUIProgressBar.BackgroundAnime  >  div > div{-webkit-animation: PetUIProgressBarMove 5s linear infinite; }
+@-webkit-keyframes PetUIProgressBarMove {0%{ background-position: 0 0; }100%{  background-position: 200px 0;}}
+/*关闭发光效果*/
+.PetUIProgressBar.CloseGlowing > div > div   { box-shadow: 0 0 !important;}
+/*
+  圆形进度条
+*/
+.PetUIProgressBar.Round{
+  font-size: 50px;
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 .1em rgba(58, 168, 237, .2);
+}
+.PetUIProgressBar.Round i{
+  position: absolute;
+  clip: rect(0, 1em, 1em, .5em);
+  width: 1em;
+  height: 1em;
+  animation: PetUIProgressBarRound-circle-clipper 1s ease-in-out infinite;
+}
+.PetUIProgressBar.Round i:after {
+  position: absolute;
+  clip: rect(0, 1em, 1em, .5em);
+  width: 1em;
+  height: 1em;
+  content: '';
+  animation: PetUIProgressBarRound-circle 1s ease-in-out infinite;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 .1em #3aa8ed;
+}
+@keyframes PetUIProgressBarRound-circle-clipper {
+  0% {
+      transform: rotate(0deg);
+  }
+  100% {
+      transform: rotate(180deg);
+  }
+}
+@keyframes PetUIProgressBarRound-circle {
+  0% {
+      transform: rotate(-180deg);
+  }
+  100% {
+      transform: rotate(180deg);
+  }
+}
+/*
+    导航栏
+*/
+.Navbar {
+  color: #000000;
+  z-index:9999;
+  top: 0px;
+  left: 0px;
+  width:100%;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  display:inline-block;
+  list-style-type: none;
+} 
+.Navbar div{
+  min-width: 40px;
+  min-height: 20px;
+  border: none;
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 15px 15px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+}
+.Navbar div:hover {
+  animation: Navbar-circle 1s 1;
+}
+@keyframes Navbar-circle {
+  100% {
+    background-color: #e7e7e7;
+  }
+}
+/*
+    提示框
+*/
+.Frame {
+  z-index:999999;
+  right:0px;
+  bottom: 0px;
+  position: fixed;
+}
+.Frame > div{
+  width: 200px;
+  height: 40px;
+  margin: 10px auto;
+  padding: 10px;
+  text-align: center;
+  border-radius: 10px;
+  background-color: #008CBA;
+  box-shadow:0px 8px 10px 0px rgba(0, 146, 186, 0.51),0px 8px 10px 0px rgba(0, 146, 186, 0.51);
+}
+/*
+    自适应处理
+*/
+/*小于400px*/
+@media screen and (max-width: 400px) {
+
+}

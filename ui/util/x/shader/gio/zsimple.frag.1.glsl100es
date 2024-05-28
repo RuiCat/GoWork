@@ -1,0 +1,19 @@
+#version 100
+precision mediump float;
+precision highp int;
+
+struct Gradient
+{
+    vec4 color1;
+    vec4 color2;
+};
+
+uniform Gradient _gradient;
+
+varying highp vec4 vertexColor;
+
+void main()
+{
+    gl_FragData[0] = vertexColor;
+}
+

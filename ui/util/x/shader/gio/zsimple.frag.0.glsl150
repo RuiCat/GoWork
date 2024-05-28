@@ -1,0 +1,13 @@
+#version 150
+
+uniform sampler2D vTexture;
+
+out vec4 fragColor;
+in vec2 vUV;
+in vec4 vertexColor;
+
+void main()
+{
+    fragColor = texture(vTexture, vUV) * vertexColor;
+}
+
