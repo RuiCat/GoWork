@@ -26,11 +26,14 @@ type LayoutFace interface {
 	Layout(gtx layout.Context) *layout.Dimensions // 组件布局
 	GetPoint() *image.Point                       // 组件绘制位置
 	GetDimensions() *layout.Dimensions            // 组件大小
+	SetDisable(disable bool)                      // 组件禁用
+	GetDisable() bool                             // 组件禁用
 }
 
 // UILayout 组件实现
 type UILayout struct {
 	LayoutFace
+	Disable bool // 是否禁用组件
 	*op.Ops
 	*material.Theme    // 主题
 	*image.Point       // 绘制位置
@@ -41,6 +44,8 @@ func (ui *UILayout) GetOps() *op.Ops                   { return ui.Ops }
 func (ui *UILayout) GetTheme() *material.Theme         { return ui.Theme }
 func (ui *UILayout) GetPoint() *image.Point            { return ui.Point }
 func (ui *UILayout) GetDimensions() *layout.Dimensions { return ui.Dimensions }
+func (ui *UILayout) SetDisable(disable bool)           { ui.Disable = disable }
+func (ui *UILayout) GetDisable() bool                  { return ui.Disable }
 func (ui *UILayout) Update() {
 	if ui.LayoutFace != nil {
 		ui.LayoutFace.Update()
@@ -81,7 +86,13 @@ func NewUIScale(face LayoutFace, value float32) *UIScale {
 // SetScale 设置缩放值
 func (ui *UIScale) SetScale(value float32) {
 	ui.value = value
+	ui.Update()
+}
+
+// Update 更新
+func (ui *UIScale) Update() {
 	ui.Affine2D = ui.Affine2D.Scale(f32.Point{X: 1, Y: 1}, f32.Point{X: ui.value, Y: ui.value})
+	ui.LayoutFace.Update()
 }
 
 // GetScale 获取缩放值
@@ -167,7 +178,7 @@ func (ui *UIGrid) Update() {
 // Layout 绘制
 func (ui *UIGrid) Layout(gtx layout.Context) *layout.Dimensions {
 	defer ui.clipRect.Push(gtx.Ops).Pop()
-	if ui.Use {
+	if ui.Use && !ui.GetDisable() {
 		ops := ui.GetOps()
 		theme := ui.GetTheme()
 		// 绘制背景线
@@ -234,7 +245,7 @@ func NewUIScroll(face LayoutFace, Axis layout.Axis) *UIScroll {
 
 // Layout 绘制
 func (ui *UIScroll) Layout(gtx layout.Context) *layout.Dimensions {
-	if ui.Use {
+	if ui.Use && !ui.GetDisable() {
 		dim := ui.GetDimensions()
 		gtx.Ops = ui.GetOps()
 		gtx.Constraints.Max.X = dim.Size.X - 5
@@ -263,6 +274,7 @@ func (ui *UIScroll) Layout(gtx layout.Context) *layout.Dimensions {
 // UIDrag 拖放
 type UIDrag struct {
 	LayoutFace
+	Use         bool // 启用拖放
 	dragging    bool
 	position    f32.Point
 	IsAdjustThe uint8 // 大小调整
@@ -279,41 +291,39 @@ func (ui *UIDrag) Layout(gtx layout.Context) (dim *layout.Dimensions) {
 	event.Op(gtx.Ops, ui)
 	if ev, ok := gtx.Source.Event(pointer.Filter{
 		Target: ui,
-		Kinds:  pointer.Press | pointer.Release | pointer.Move | pointer.Drag,
+		Kinds:  pointer.Press | pointer.Release | pointer.Move | pointer.Drag | pointer.Cancel,
 	}); ok {
 		dim := ui.GetDimensions()
 		point := ui.GetPoint()
 		event := ev.(pointer.Event)
 		pos := event.Position.Sub(f32.Point{X: float32(point.X), Y: float32(point.Y)})
-		if pos.X > 0 && pos.Y > 0 && pos.X < float32(dim.Size.X) && pos.Y < float32(dim.Size.Y) || ui.dragging {
+		if event.Buttons == pointer.ButtonSecondary {
+			ui.Use = true
+			ui.SetDisable(true)
+		} else if ((pos.X > 0 && pos.Y > 0 && pos.X < float32(dim.Size.X) && pos.Y < float32(dim.Size.Y)) && ui.Use) || ui.dragging {
 			if !ui.dragging {
 				//@ 处理鼠标所在点击的位置
-				if pos.X-10 < -5 {
-					ui.IsAdjustThe |= 0b0000001
+				if pos.X+10 > float32(dim.Size.X) && pos.Y+10 > float32(dim.Size.Y) {
+					ui.IsAdjustThe = 0b0001100
+					pointer.CursorNorthWestResize.Add(gtx.Ops) // 左下角
+				} else if pos.X-10 < -5 {
+					ui.IsAdjustThe = 0b0000001
 					pointer.CursorColResize.Add(gtx.Ops) // 左右
 				} else if pos.X+10 > float32(dim.Size.X) {
-					ui.IsAdjustThe |= 0b0000100
+					ui.IsAdjustThe = 0b0000100
 					pointer.CursorColResize.Add(gtx.Ops) // 左右
-				} else {
-					ui.IsAdjustThe = 0
-				}
-				if pos.Y+10 > float32(dim.Size.Y) {
-					ui.IsAdjustThe |= 0b0001000
+				} else if pos.Y+10 > float32(dim.Size.Y) {
+					ui.IsAdjustThe = 0b0001000
 					pointer.CursorRowResize.Add(gtx.Ops) // 上下
 				} else if pos.Y-10 < -5 {
-					ui.IsAdjustThe |= 0b0000010
+					ui.IsAdjustThe = 0b0000010
 					pointer.CursorRowResize.Add(gtx.Ops) // 上下
+				} else {
+					ui.IsAdjustThe = 0b0010000
+					pointer.CursorGrabbing.Add(gtx.Ops) // 移动
 				}
-				if ui.IsAdjustThe == 0 {
-					ui.IsAdjustThe |= 0b0010000
-				} else if ui.IsAdjustThe == 0b0001100 {
-					pointer.CursorNorthWestResize.Add(gtx.Ops) // 左下角
-				}
-			}
-			// 处理移动
-			if event.Buttons == pointer.ButtonPrimary {
-				switch event.Kind {
-				case pointer.Press:
+				// 处理事件
+				if event.Buttons == pointer.ButtonPrimary && event.Kind == pointer.Press {
 					switch ui.IsAdjustThe {
 					case 0b0000010:
 						ui.dragging = true
@@ -334,49 +344,49 @@ func (ui *UIDrag) Layout(gtx layout.Context) (dim *layout.Dimensions) {
 					case 0b0010000:
 						ui.dragging = true
 						ui.position = pos
-						pointer.CursorGrabbing.Add(gtx.Ops) // 移动
 					}
-				case pointer.Drag:
-					if ui.dragging {
-						r := pos.Sub(ui.position)
-						switch ui.IsAdjustThe {
-						case 0b0000010:
-							point.Y += int(r.Y)
-							dim.Size.Y -= int(r.Y)
-							pointer.CursorRowResize.Add(gtx.Ops) // 上下
-						case 0b0001000:
-							dim.Size.Y = int(pos.Y - ui.position.Y)
-							pointer.CursorRowResize.Add(gtx.Ops) // 上下
-						case 0b0000100:
-							dim.Size.X = int(pos.X - ui.position.X)
-							pointer.CursorColResize.Add(gtx.Ops) // 左右
-						case 0b0000001:
-							point.X += int(r.X)
-							dim.Size.X -= int(r.X)
-							pointer.CursorColResize.Add(gtx.Ops) // 左右
-						case 0b0001100:
-							dim.Size.Y = int(pos.Y - ui.position.Y)
-							dim.Size.X = int(pos.X - ui.position.X)
-							pointer.CursorNorthWestResize.Add(gtx.Ops) // 左下角
-						case 0b0010000:
-							point.X += int(r.X)
-							point.Y += int(r.Y)
-							pointer.CursorGrabbing.Add(gtx.Ops) // 移动
-						}
-					}
-				default: // 还原指针
-					ui.IsAdjustThe = 0
-					pointer.CursorDefault.Add(gtx.Ops)
-				}
-				if ui.dragging {
-					ui.LayoutFace.Update()
 				}
 			} else {
-				ui.dragging = false // 移动复位
+				// 处理移动过程
+				if event.Kind == pointer.Drag {
+					r := pos.Sub(ui.position)
+					switch ui.IsAdjustThe {
+					case 0b0000010:
+						point.Y += int(r.Y)
+						dim.Size.Y -= int(r.Y)
+						pointer.CursorRowResize.Add(gtx.Ops) // 上下
+					case 0b0001000:
+						dim.Size.Y = int(pos.Y - ui.position.Y)
+						pointer.CursorRowResize.Add(gtx.Ops) // 上下
+					case 0b0000100:
+						dim.Size.X = int(pos.X - ui.position.X)
+						pointer.CursorColResize.Add(gtx.Ops) // 左右
+					case 0b0000001:
+						point.X += int(r.X)
+						dim.Size.X -= int(r.X)
+						pointer.CursorColResize.Add(gtx.Ops) // 左右
+					case 0b0001100:
+						dim.Size.Y = int(pos.Y - ui.position.Y)
+						dim.Size.X = int(pos.X - ui.position.X)
+						pointer.CursorNorthWestResize.Add(gtx.Ops) // 左下角
+					case 0b0010000:
+						point.X += int(r.X)
+						point.Y += int(r.Y)
+						pointer.CursorGrabbing.Add(gtx.Ops) // 移动
+					}
+				} else {
+					ui.Use = false
+					ui.dragging = false // 移动复位
+					ui.IsAdjustThe = 0
+					ui.SetDisable(false)
+					pointer.CursorDefault.Add(gtx.Ops)
+				}
 			}
-		} else {
-			ui.IsAdjustThe = 0 // 复位
 		}
+	}
+	if ui.dragging {
+		ui.LayoutFace.Update()
+
 	}
 	return ui.LayoutFace.Layout(gtx)
 }
