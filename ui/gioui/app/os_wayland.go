@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -24,11 +25,13 @@ import (
 
 	"ui/gioui/app/internal/xkb"
 	"ui/gioui/internal/fling"
+	"ui/gioui/io/event"
 	"ui/gioui/io/key"
 	"ui/gioui/io/pointer"
 	"ui/gioui/io/system"
 	"ui/gioui/io/transfer"
 	"ui/gioui/mat/f32"
+	"ui/gioui/op"
 	"ui/gioui/unit"
 )
 
@@ -97,7 +100,9 @@ type wlDisplay struct {
 		read, write int
 	}
 
-	repeat repeatState
+	repeat        repeatState
+	poller        poller
+	readClipClose chan struct{}
 }
 
 type wlSeat struct {
@@ -137,7 +142,7 @@ type repeatState struct {
 	delay time.Duration
 
 	key   uint32
-	win   *callbacks
+	win   *window
 	stopC chan struct{}
 
 	start time.Duration
@@ -194,12 +199,10 @@ type window struct {
 		dir            f32.Point
 	}
 
-	stage             Stage
-	dead              bool
+	configured        bool
 	lastFrameCallback *C.struct_wl_callback
 
 	animating bool
-	redraw    bool
 	// The most recent configure serial waiting to be ack'ed.
 	serial C.uint32_t
 	scale  int
@@ -212,6 +215,12 @@ type window struct {
 	clipReads chan transfer.DataEvent
 
 	wakeups chan struct{}
+
+	closing bool
+
+	// invMu avoids the race between the destruction of disp and
+	// Invalidate waking it up.
+	invMu sync.Mutex
 }
 
 type poller struct {
@@ -260,25 +269,17 @@ func newWLWindow(callbacks *callbacks, options []Option) error {
 		return err
 	}
 	w.w = callbacks
-	go func() {
-		defer d.destroy()
-		defer w.destroy()
+	w.w.SetDriver(w)
 
-		w.w.SetDriver(w)
+	// Finish and commit setup from createNativeWindow.
+	w.Configure(options)
+	w.draw(true)
+	C.wl_surface_commit(w.surf)
 
-		// Finish and commit setup from createNativeWindow.
-		w.Configure(options)
-		C.wl_surface_commit(w.surf)
-
-		w.w.Event(WaylandViewEvent{
-			Display: unsafe.Pointer(w.display()),
-			Surface: unsafe.Pointer(w.surf),
-		})
-
-		err := w.loop()
-		w.w.Event(WaylandViewEvent{})
-		w.w.Event(DestroyEvent{Err: err})
-	}()
+	w.ProcessEvent(WaylandViewEvent{
+		Display: unsafe.Pointer(w.display()),
+		Surface: unsafe.Pointer(w.surf),
+	})
 	return nil
 }
 
@@ -549,15 +550,15 @@ func gio_onSeatName(data unsafe.Pointer, seat *C.struct_wl_seat, name *C.char) {
 func gio_onXdgSurfaceConfigure(data unsafe.Pointer, wmSurf *C.struct_xdg_surface, serial C.uint32_t) {
 	w := callbackLoad(data).(*window)
 	w.serial = serial
-	w.redraw = true
 	C.xdg_surface_ack_configure(wmSurf, serial)
-	w.setStage(StageRunning)
+	w.configured = true
+	w.draw(true)
 }
 
 //export gio_onToplevelClose
 func gio_onToplevelClose(data unsafe.Pointer, topLvl *C.struct_xdg_toplevel) {
 	w := callbackLoad(data).(*window)
-	w.dead = true
+	w.closing = true
 }
 
 //export gio_onToplevelConfigure
@@ -586,8 +587,8 @@ func gio_onToplevelDecorationConfigure(data unsafe.Pointer, deco *C.struct_zxdg_
 		} else {
 			w.size.Y += int(w.config.decoHeight)
 		}
-		w.w.Event(ConfigEvent{Config: w.config})
-		w.redraw = true
+		w.ProcessEvent(ConfigEvent{Config: w.config})
+		w.draw(true)
 	}
 }
 
@@ -645,7 +646,7 @@ func gio_onSurfaceEnter(data unsafe.Pointer, surf *C.struct_wl_surface, output *
 	if w.config.Mode == Minimized {
 		// Minimized window got brought back up: it is no longer so.
 		w.config.Mode = Windowed
-		w.w.Event(ConfigEvent{Config: w.config})
+		w.ProcessEvent(ConfigEvent{Config: w.config})
 	}
 }
 
@@ -790,7 +791,7 @@ func gio_onTouchDown(data unsafe.Pointer, touch *C.struct_wl_touch, serial, t C.
 		X: fromFixed(x) * float32(w.scale),
 		Y: fromFixed(y) * float32(w.scale),
 	}
-	w.w.Event(pointer.Event{
+	w.ProcessEvent(pointer.Event{
 		Kind:      pointer.Press,
 		Source:    pointer.Touch,
 		Position:  w.lastTouch,
@@ -806,7 +807,7 @@ func gio_onTouchUp(data unsafe.Pointer, touch *C.struct_wl_touch, serial, t C.ui
 	s.serial = serial
 	w := s.touchFoci[id]
 	delete(s.touchFoci, id)
-	w.w.Event(pointer.Event{
+	w.ProcessEvent(pointer.Event{
 		Kind:      pointer.Release,
 		Source:    pointer.Touch,
 		Position:  w.lastTouch,
@@ -824,7 +825,7 @@ func gio_onTouchMotion(data unsafe.Pointer, touch *C.struct_wl_touch, t C.uint32
 		X: fromFixed(x) * float32(w.scale),
 		Y: fromFixed(y) * float32(w.scale),
 	}
-	w.w.Event(pointer.Event{
+	w.ProcessEvent(pointer.Event{
 		Kind:      pointer.Move,
 		Position:  w.lastTouch,
 		Source:    pointer.Touch,
@@ -843,7 +844,7 @@ func gio_onTouchCancel(data unsafe.Pointer, touch *C.struct_wl_touch) {
 	s := callbackLoad(data).(*wlSeat)
 	for id, w := range s.touchFoci {
 		delete(s.touchFoci, id)
-		w.w.Event(pointer.Event{
+		w.ProcessEvent(pointer.Event{
 			Kind:   pointer.Cancel,
 			Source: pointer.Touch,
 		})
@@ -869,7 +870,7 @@ func gio_onPointerLeave(data unsafe.Pointer, p *C.struct_wl_pointer, serial C.ui
 	s.serial = serial
 	if w.inCompositor {
 		w.inCompositor = false
-		w.w.Event(pointer.Event{Kind: pointer.Cancel})
+		w.ProcessEvent(pointer.Event{Kind: pointer.Cancel})
 	}
 }
 
@@ -930,7 +931,7 @@ func gio_onPointerButton(data unsafe.Pointer, p *C.struct_wl_pointer, serial, t,
 	}
 	w.flushScroll()
 	w.resetFling()
-	w.w.Event(pointer.Event{
+	w.ProcessEvent(pointer.Event{
 		Kind:      kind,
 		Source:    pointer.Mouse,
 		Buttons:   w.pointerBtns,
@@ -1018,8 +1019,11 @@ func gio_onPointerAxisDiscrete(data unsafe.Pointer, p *C.struct_wl_pointer, axis
 }
 
 func (w *window) ReadClipboard() {
+	if w.disp.readClipClose != nil {
+		return
+	}
+	w.disp.readClipClose = make(chan struct{})
 	r, err := w.disp.readClipboard()
-	// Send empty responses on unavailable clipboards or errors.
 	if r == nil || err != nil {
 		return
 	}
@@ -1027,13 +1031,17 @@ func (w *window) ReadClipboard() {
 	go func() {
 		defer r.Close()
 		data, _ := io.ReadAll(r)
-		w.clipReads <- transfer.DataEvent{
+		e := transfer.DataEvent{
 			Type: "application/text",
 			Open: func() io.ReadCloser {
 				return io.NopCloser(bytes.NewReader(data))
 			},
 		}
-		w.Wakeup()
+		select {
+		case w.clipReads <- e:
+			w.disp.wakeup()
+		case <-w.disp.readClipClose:
+		}
 	}()
 }
 
@@ -1096,8 +1104,7 @@ func (w *window) Configure(options []Option) {
 		w.config.MaxSize = cnf.MaxSize
 		w.setWindowConstraints()
 	}
-	w.w.Event(ConfigEvent{Config: w.config})
-	w.redraw = true
+	w.ProcessEvent(ConfigEvent{Config: w.config})
 }
 
 func (w *window) setWindowConstraints() {
@@ -1134,7 +1141,7 @@ func (w *window) Perform(actions system.Action) {
 	walkActions(actions, func(action system.Action) {
 		switch action {
 		case system.ActionClose:
-			w.dead = true
+			w.closing = true
 		}
 	})
 }
@@ -1217,7 +1224,8 @@ func gio_onKeyboardEnter(data unsafe.Pointer, keyboard *C.struct_wl_keyboard, se
 	w := callbackLoad(unsafe.Pointer(surf)).(*window)
 	s.keyboardFocus = w
 	s.disp.repeat.Stop(0)
-	w.w.Event(key.FocusEvent{Focus: true})
+	w.config.Focused = true
+	w.ProcessEvent(ConfigEvent{Config: w.config})
 }
 
 //export gio_onKeyboardLeave
@@ -1226,7 +1234,8 @@ func gio_onKeyboardLeave(data unsafe.Pointer, keyboard *C.struct_wl_keyboard, se
 	s.serial = serial
 	s.disp.repeat.Stop(0)
 	w := s.keyboardFocus
-	w.w.Event(key.FocusEvent{Focus: false})
+	w.config.Focused = false
+	w.ProcessEvent(ConfigEvent{Config: w.config})
 }
 
 //export gio_onKeyboardKey
@@ -1244,7 +1253,7 @@ func gio_onKeyboardKey(data unsafe.Pointer, keyboard *C.struct_wl_keyboard, seri
 			// There's no support for IME yet.
 			w.w.EditorInsert(ee.Text)
 		} else {
-			w.w.Event(e)
+			w.ProcessEvent(e)
 		}
 	}
 	if state != C.WL_KEYBOARD_KEY_STATE_PRESSED {
@@ -1279,7 +1288,7 @@ func (r *repeatState) Start(w *window, keyCode uint32, t time.Duration) {
 	r.now = 0
 	r.stopC = stopC
 	r.key = keyCode
-	r.win = w.w
+	r.win = w
 	rate, delay := r.rate, r.delay
 	go func() {
 		timer := time.NewTimer(delay)
@@ -1337,9 +1346,9 @@ func (r *repeatState) Repeat(d *wlDisplay) {
 		for _, e := range d.xkb.DispatchKey(r.key, key.Press) {
 			if ee, ok := e.(key.EditEvent); ok {
 				// There's no support for IME yet.
-				r.win.EditorInsert(ee.Text)
+				r.win.w.EditorInsert(ee.Text)
 			} else {
-				r.win.Event(e)
+				r.win.ProcessEvent(e)
 			}
 		}
 		r.last += delay
@@ -1352,28 +1361,74 @@ func gio_onFrameDone(data unsafe.Pointer, callback *C.struct_wl_callback, t C.ui
 	w := callbackLoad(data).(*window)
 	if w.lastFrameCallback == callback {
 		w.lastFrameCallback = nil
+		w.draw(false)
 	}
 }
 
-func (w *window) loop() error {
-	var p poller
-	for {
-		if err := w.disp.dispatch(&p); err != nil {
-			return err
-		}
-		select {
-		case e := <-w.clipReads:
-			w.w.Event(e)
-		case <-w.wakeups:
-			w.w.Event(wakeupEvent{})
-		default:
-		}
-		if w.dead {
-			break
-		}
-		w.draw()
+func (w *window) close(err error) {
+	w.ProcessEvent(WaylandViewEvent{})
+	w.ProcessEvent(DestroyEvent{Err: err})
+	w.destroy()
+	w.invMu.Lock()
+	w.disp.destroy()
+	w.disp = nil
+	w.invMu.Unlock()
+}
+
+func (w *window) dispatch() {
+	if w.disp == nil {
+		<-w.wakeups
+		w.w.Invalidate()
+		return
 	}
-	return nil
+	if err := w.disp.dispatch(); err != nil || w.closing {
+		w.close(err)
+		return
+	}
+	select {
+	case e := <-w.clipReads:
+		w.disp.readClipClose = nil
+		w.ProcessEvent(e)
+	case <-w.wakeups:
+		w.w.Invalidate()
+	default:
+	}
+}
+
+func (w *window) ProcessEvent(e event.Event) {
+	w.w.ProcessEvent(e)
+}
+
+func (w *window) Event() event.Event {
+	for {
+		evt, ok := w.w.nextEvent()
+		if !ok {
+			w.dispatch()
+			continue
+		}
+		return evt
+	}
+}
+
+func (w *window) Invalidate() {
+	select {
+	case w.wakeups <- struct{}{}:
+	default:
+		return
+	}
+	w.invMu.Lock()
+	defer w.invMu.Unlock()
+	if w.disp != nil {
+		w.disp.wakeup()
+	}
+}
+
+func (w *window) Run(f func()) {
+	f()
+}
+
+func (w *window) Frame(frame *op.Ops) {
+	w.w.ProcessFrame(frame, nil)
 }
 
 // bindDataDevice initializes the dataDev field if and only if both
@@ -1389,13 +1444,21 @@ func (d *wlDisplay) bindDataDevice() {
 	}
 }
 
-func (d *wlDisplay) dispatch(p *poller) error {
+func (d *wlDisplay) dispatch() error {
+	// wl_display_prepare_read records the current thread for
+	// use in wl_display_read_events or wl_display_cancel_events.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	dispfd := C.wl_display_get_fd(d.disp)
 	// Poll for events and notifications.
-	pollfds := append(p.pollfds[:0],
+	pollfds := append(d.poller.pollfds[:0],
 		syscall.PollFd{Fd: int32(dispfd), Events: syscall.POLLIN | syscall.POLLERR},
 		syscall.PollFd{Fd: int32(d.notify.read), Events: syscall.POLLIN | syscall.POLLERR},
 	)
+	for C.wl_display_prepare_read(d.disp) != 0 {
+		C.wl_display_dispatch_pending(d.disp)
+	}
 	dispFd := &pollfds[0]
 	if ret, err := C.wl_display_flush(d.disp); ret < 0 {
 		if err != syscall.EAGAIN {
@@ -1406,11 +1469,25 @@ func (d *wlDisplay) dispatch(p *poller) error {
 		dispFd.Events |= syscall.POLLOUT
 	}
 	if _, err := syscall.Poll(pollfds, -1); err != nil && err != syscall.EINTR {
+		C.wl_display_cancel_read(d.disp)
 		return fmt.Errorf("wayland: poll failed: %v", err)
+	}
+	if dispFd.Revents&(syscall.POLLERR|syscall.POLLHUP) != 0 {
+		C.wl_display_cancel_read(d.disp)
+		return errors.New("wayland: display file descriptor gone")
+	}
+	// Handle events.
+	if dispFd.Revents&syscall.POLLIN != 0 {
+		if ret, err := C.wl_display_read_events(d.disp); ret < 0 {
+			return fmt.Errorf("wayland: wl_display_read_events failed: %v", err)
+		}
+		C.wl_display_dispatch_pending(d.disp)
+	} else {
+		C.wl_display_cancel_read(d.disp)
 	}
 	// Clear notifications.
 	for {
-		_, err := syscall.Read(d.notify.read, p.buf[:])
+		_, err := syscall.Read(d.notify.read, d.poller.buf[:])
 		if err == syscall.EAGAIN {
 			break
 		}
@@ -1418,29 +1495,15 @@ func (d *wlDisplay) dispatch(p *poller) error {
 			return fmt.Errorf("wayland: read from notify pipe failed: %v", err)
 		}
 	}
-	// Handle events
-	switch {
-	case dispFd.Revents&syscall.POLLIN != 0:
-		if ret, err := C.wl_display_dispatch(d.disp); ret < 0 {
-			return fmt.Errorf("wayland: wl_display_dispatch failed: %v", err)
-		}
-	case dispFd.Revents&(syscall.POLLERR|syscall.POLLHUP) != 0:
-		return errors.New("wayland: display file descriptor gone")
-	}
 	d.repeat.Repeat(d)
 	return nil
 }
 
-func (w *window) Wakeup() {
-	select {
-	case w.wakeups <- struct{}{}:
-	default:
-	}
-	w.disp.wakeup()
-}
-
 func (w *window) SetAnimating(anim bool) {
 	w.animating = anim
+	if anim {
+		w.draw(false)
+	}
 }
 
 // Wakeup wakes up the event loop through the notification pipe.
@@ -1452,6 +1515,10 @@ func (d *wlDisplay) wakeup() {
 }
 
 func (w *window) destroy() {
+	if w.lastFrameCallback != nil {
+		C.wl_callback_destroy(w.lastFrameCallback)
+		w.lastFrameCallback = nil
+	}
 	if w.cursor.surf != nil {
 		C.wl_surface_destroy(w.cursor.surf)
 	}
@@ -1576,7 +1643,7 @@ func (w *window) flushScroll() {
 	if total == (f32.Point{}) {
 		return
 	}
-	w.w.Event(pointer.Event{
+	w.ProcessEvent(pointer.Event{
 		Kind:      pointer.Scroll,
 		Source:    pointer.Mouse,
 		Buttons:   w.pointerBtns,
@@ -1599,7 +1666,7 @@ func (w *window) onPointerMotion(x, y C.wl_fixed_t, t C.uint32_t) {
 		X: fromFixed(x) * float32(w.scale),
 		Y: fromFixed(y) * float32(w.scale),
 	}
-	w.w.Event(pointer.Event{
+	w.ProcessEvent(pointer.Event{
 		Kind:      pointer.Move,
 		Position:  w.lastPos,
 		Buttons:   w.pointerBtns,
@@ -1620,7 +1687,8 @@ func (w *window) systemGesture() (*C.struct_wl_cursor, C.uint32_t) {
 	if w.config.Mode != Windowed || w.config.Decorated {
 		return nil, 0
 	}
-	border := w.w.w.metric.Dp(3)
+	_, cfg := w.getConfig()
+	border := cfg.Dp(3)
 	x, y, size := int(w.lastPos.X), int(w.lastPos.Y), w.config.Size
 	north := y <= border
 	south := y >= size.Y-border
@@ -1674,13 +1742,10 @@ func (w *window) updateOutputs() {
 	if found && scale != w.scale {
 		w.scale = scale
 		C.wl_surface_set_buffer_scale(w.surf, C.int32_t(w.scale))
-		w.redraw = true
+		w.draw(true)
 	}
-	if !found {
-		w.setStage(StagePaused)
-	} else {
-		w.setStage(StageRunning)
-		w.redraw = true
+	if found {
+		w.draw(true)
 	}
 }
 
@@ -1692,7 +1757,10 @@ func (w *window) getConfig() (image.Point, unit.Metric) {
 	}
 }
 
-func (w *window) draw() {
+func (w *window) draw(sync bool) {
+	if !w.configured {
+		return
+	}
 	w.flushScroll()
 	size, cfg := w.getConfig()
 	if cfg == (unit.Metric{}) {
@@ -1700,11 +1768,9 @@ func (w *window) draw() {
 	}
 	if size != w.config.Size {
 		w.config.Size = size
-		w.w.Event(ConfigEvent{Config: w.config})
+		w.ProcessEvent(ConfigEvent{Config: w.config})
 	}
 	anim := w.animating || w.fling.anim.Active()
-	sync := w.redraw
-	w.redraw = false
 	// Draw animation only when not waiting for frame callback.
 	redrawAnim := anim && w.lastFrameCallback == nil
 	if !redrawAnim && !sync {
@@ -1715,7 +1781,7 @@ func (w *window) draw() {
 		// Use the surface as listener data for gio_onFrameDone.
 		C.wl_callback_add_listener(w.lastFrameCallback, &C.gio_callback_listener, unsafe.Pointer(w.surf))
 	}
-	w.w.Event(frameEvent{
+	w.ProcessEvent(frameEvent{
 		FrameEvent: FrameEvent{
 			Now:    time.Now(),
 			Size:   w.config.Size,
@@ -1723,14 +1789,6 @@ func (w *window) draw() {
 		},
 		Sync: sync,
 	})
-}
-
-func (w *window) setStage(s Stage) {
-	if s == w.stage {
-		return
-	}
-	w.stage = s
-	w.w.Event(StageEvent{Stage: s})
 }
 
 func (w *window) display() *C.struct_wl_display {
@@ -1824,6 +1882,10 @@ func newWLDisplay() (*wlDisplay, error) {
 }
 
 func (d *wlDisplay) destroy() {
+	if d.readClipClose != nil {
+		close(d.readClipClose)
+		d.readClipClose = nil
+	}
 	if d.notify.write != 0 {
 		syscall.Close(d.notify.write)
 		d.notify.write = 0
@@ -1865,6 +1927,7 @@ func (d *wlDisplay) destroy() {
 	if d.disp != nil {
 		C.wl_display_disconnect(d.disp)
 		callbackDelete(unsafe.Pointer(d.disp))
+		d.disp = nil
 	}
 }
 

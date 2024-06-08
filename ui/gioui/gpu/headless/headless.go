@@ -121,11 +121,6 @@ func (w *Window) Release() {
 	}
 }
 
-// GetDevice 得到底层接口
-func (w *Window) GetDevice() driver.Device {
-	return w.dev
-}
-
 // Size returns the window size.
 func (w *Window) Size() image.Point {
 	return w.size

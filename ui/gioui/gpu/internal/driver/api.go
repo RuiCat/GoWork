@@ -100,22 +100,18 @@ var (
 func NewDevice(api API) (Device, error) {
 	switch api := api.(type) {
 	case OpenGL:
-		fmt.Println("后端:OpenGL")
 		if NewOpenGLDevice != nil {
 			return NewOpenGLDevice(api)
 		}
 	case Direct3D11:
-		fmt.Println("后端:Direct3D11")
 		if NewDirect3D11Device != nil {
 			return NewDirect3D11Device(api)
 		}
 	case Metal:
-		fmt.Println("后端:Metal")
 		if NewMetalDevice != nil {
 			return NewMetalDevice(api)
 		}
 	case Vulkan:
-		fmt.Println("后端:Vulkan")
 		if NewVulkanDevice != nil {
 			return NewVulkanDevice(api)
 		}

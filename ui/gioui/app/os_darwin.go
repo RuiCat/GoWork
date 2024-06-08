@@ -75,9 +75,13 @@ var displayLinks sync.Map
 
 var mainFuncs = make(chan func(), 1)
 
+func isMainThread() bool {
+	return bool(C.isMainThread())
+}
+
 // runOnMain runs the function on the main thread.
 func runOnMain(f func()) {
-	if C.isMainThread() {
+	if isMainThread() {
 		f()
 		return
 	}
@@ -260,8 +264,9 @@ func windowSetCursor(from, to pointer.Cursor) pointer.Cursor {
 	return to
 }
 
-func (w *window) Wakeup() {
+func (w *window) wakeup() {
 	runOnMain(func() {
-		w.w.Event(wakeupEvent{})
+		w.loop.Wakeup()
+		w.loop.FlushEvents()
 	})
 }

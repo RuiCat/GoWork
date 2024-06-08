@@ -229,19 +229,19 @@ func (e *Editor) processPointer(gtx layout.Context) (EditorEvent, bool) {
 		axis = gesture.Vertical
 		smin, smax = sbounds.Min.Y, sbounds.Max.Y
 	}
-	var scrollRange image.Rectangle
+	var scrollX, scrollY pointer.ScrollRange
 	textDims := e.text.FullDimensions()
 	visibleDims := e.text.Dimensions()
 	if e.SingleLine {
 		scrollOffX := e.text.ScrollOff().X
-		scrollRange.Min.X = min(-scrollOffX, 0)
-		scrollRange.Max.X = max(0, textDims.Size.X-(scrollOffX+visibleDims.Size.X))
+		scrollX.Min = min(-scrollOffX, 0)
+		scrollX.Max = max(0, textDims.Size.X-(scrollOffX+visibleDims.Size.X))
 	} else {
 		scrollOffY := e.text.ScrollOff().Y
-		scrollRange.Min.Y = -scrollOffY
-		scrollRange.Max.Y = max(0, textDims.Size.Y-(scrollOffY+visibleDims.Size.Y))
+		scrollY.Min = -scrollOffY
+		scrollY.Max = max(0, textDims.Size.Y-(scrollOffY+visibleDims.Size.Y))
 	}
-	sdist := e.scroller.Update(gtx.Metric, gtx.Source, gtx.Now, axis, scrollRange)
+	sdist := e.scroller.Update(gtx.Metric, gtx.Source, gtx.Now, axis, scrollX, scrollY)
 	var soff int
 	if e.SingleLine {
 		e.text.ScrollRel(sdist, 0)
@@ -313,8 +313,8 @@ func (e *Editor) processPointerEvent(gtx layout.Context, ev event.Event) (Editor
 				e.text.MoveWord(1, selectionExtend)
 				e.dragging = false
 			case evt.NumClicks >= 3:
-				e.text.MoveStart(selectionClear)
-				e.text.MoveEnd(selectionExtend)
+				e.text.MoveLineStart(selectionClear)
+				e.text.MoveLineEnd(selectionExtend)
 				e.dragging = false
 			}
 		}
@@ -375,8 +375,8 @@ func (e *Editor) processKey(gtx layout.Context) (EditorEvent, bool) {
 		key.Filter{Focus: e, Name: key.NameDeleteBackward, Optional: key.ModShortcutAlt | key.ModShift},
 		key.Filter{Focus: e, Name: key.NameDeleteForward, Optional: key.ModShortcutAlt | key.ModShift},
 
-		key.Filter{Focus: e, Name: key.NameHome, Optional: key.ModShift},
-		key.Filter{Focus: e, Name: key.NameEnd, Optional: key.ModShift},
+		key.Filter{Focus: e, Name: key.NameHome, Optional: key.ModShortcut | key.ModShift},
+		key.Filter{Focus: e, Name: key.NameEnd, Optional: key.ModShortcut | key.ModShift},
 		key.Filter{Focus: e, Name: key.NamePageDown, Optional: key.ModShift},
 		key.Filter{Focus: e, Name: key.NamePageUp, Optional: key.ModShift},
 		condFilter(!atBeginning, key.Filter{Focus: e, Name: key.NameLeftArrow, Optional: key.ModShortcutAlt | key.ModShift}),
@@ -522,6 +522,10 @@ func (e *Editor) command(gtx layout.Context, k key.Event) (EditorEvent, bool) {
 					}
 				}
 			}
+		case key.NameHome:
+			e.text.MoveTextStart(selAct)
+		case key.NameEnd:
+			e.text.MoveTextEnd(selAct)
 		}
 		return nil, false
 	}
@@ -583,9 +587,9 @@ func (e *Editor) command(gtx layout.Context, k key.Event) (EditorEvent, bool) {
 	case key.NamePageDown:
 		e.text.MovePages(+1, selAct)
 	case key.NameHome:
-		e.text.MoveStart(selAct)
+		e.text.MoveLineStart(selAct)
 	case key.NameEnd:
-		e.text.MoveEnd(selAct)
+		e.text.MoveLineEnd(selAct)
 	}
 	return nil, false
 }
