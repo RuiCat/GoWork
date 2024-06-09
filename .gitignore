@@ -1,4 +1,4 @@
-.vscode
-text
+.vscode/*
+text/*
 torch/torch/libtch/lib/*
 go.work
